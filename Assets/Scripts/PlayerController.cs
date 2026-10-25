@@ -14,7 +14,7 @@ public class PlayerController : MonoBehaviour
     public float longJumpVelocity = 11.5f;
     public float longJumpSpeedMul = 1.45f;
     [Min(0.05f)] public float halfHeight = 1f;
-    public float deathY = -8f;
+    public float deathY = -40f;
     public LayerMask groundMask;
     public PlayerColorPalette palette;
     public Vector3 centerOffset;

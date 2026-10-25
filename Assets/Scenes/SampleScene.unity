@@ -1528,10 +1528,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   target: {fileID: 1512790830571083757}
-  offset: {x: 4.5, y: 4.5, z: -8}
-  lookOffset: {x: 0, y: 1.3, z: 0}
+  offset: {x: 26, y: 10.5, z: -14}
+  lookOffset: {x: 0, y: 1.1, z: 6}
   smoothTime: 0.12
-  followVertical: 0
+  followVertical: 1
 --- !u!81 &1891499202
 AudioListener:
   m_ObjectHideFlags: 0
@@ -1573,7 +1573,7 @@ Camera:
     height: 1
   near clip plane: 0.1
   far clip plane: 320
-  field of view: 48
+  field of view: 40
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
@@ -1599,8 +1599,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1891499200}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.1614929, y: -0.2498453, z: 0.042303246, w: 0.953786}
-  m_LocalPosition: {x: 4.5, y: 5.1770945, z: -7}
+  m_LocalRotation: {x: 0.12478296, y: -0.43745786, z: 0.061443318, w: 0.8884169}
+  m_LocalPosition: {x: 26, y: 10.5, z: 6}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1803,12 +1803,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   baseSpeed: 15
-  gravity: -20
-  jumpVelocity: 8.5
+  gravity: -10
+  jumpVelocity: 15
   longJumpVelocity: 11.5
   longJumpSpeedMul: 1.45
   halfHeight: 1
-  deathY: -8
+  deathY: -40
   groundMask:
     serializedVersion: 2
     m_Bits: 256

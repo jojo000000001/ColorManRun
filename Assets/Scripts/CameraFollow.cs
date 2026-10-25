@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// 在 Player 移动完成后跟随。默认仅跟随 X/Z，跳跃时保持相机高度稳定。
+/// 在 Player 移动完成后平滑跟随，包括跳跃和不同高度跑道间的下落。
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Camera))]
@@ -9,10 +9,11 @@ public class CameraFollow : MonoBehaviour
 {
     public Transform target;
     // 轨道沿世界 +Z 延伸；摄像机保持在 Player 的右后上方。
-    public Vector3 offset = new Vector3(4.5f, 4.5f, -8f);
-    public Vector3 lookOffset = new Vector3(0f, 1.3f, 0f);
+    public Vector3 offset = new Vector3(26f, 10.5f, -14f);
+    // 向前预留视野，让 Player 偏左、前方跑道向画面右上方延伸。
+    public Vector3 lookOffset = new Vector3(0f, 1.1f, 6f);
     [Min(0f)] public float smoothTime = 0.12f;
-    public bool followVertical;
+    public bool followVertical = true;
 
     Vector3 velocity;
     float referenceY;
@@ -57,7 +58,7 @@ public class CameraFollow : MonoBehaviour
 
     void AimAtTarget()
     {
-        // 位置保持平行跟随，但朝向始终取 Player 当前实际位置（包括跳跃高度）。
+        // 位置保持平行跟随，瞄准点随 Player（包括跳跃高度）加构图偏移。
         Vector3 direction = target.position + lookOffset - transform.position;
         if (direction.sqrMagnitude > 0.0001f)
             transform.rotation = Quaternion.LookRotation(direction, Vector3.up);

@@ -10,8 +10,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 43a06d61ebbdd0f40b6af4ae462868f5, type: 3}
-  m_Name: Track_Yellow 1
+  m_Name: Track_Yellow short
   m_EditorClassIdentifier: 
-  length: 12
+  length: 20
   thickness: 2
   color: 0
