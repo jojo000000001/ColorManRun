@@ -30,7 +30,7 @@ public sealed class TrackLayoutTool : EditorWindow
         segmentCount = EditorGUILayout.IntField("段数", segmentCount);
         segmentLength = EditorGUILayout.FloatField("每段长度", segmentLength);
         gapWidth = EditorGUILayout.FloatField("缺口宽度", gapWidth);
-        colorCount = EditorGUILayout.IntField("颜色数", colorCount);
+        colorCount = EditorGUILayout.IntSlider("颜色数（橙 / 粉）", colorCount, 1, TrackPart.ColorCount);
 
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("固定尺寸", EditorStyles.boldLabel);
@@ -59,7 +59,8 @@ public sealed class TrackLayoutTool : EditorWindow
 
     private bool IsValidInput()
     {
-        return segmentCount > 0 && segmentLength > 0f && gapWidth >= 0f && colorCount > 0;
+        return segmentCount > 0 && segmentLength > 0f && gapWidth >= 0f &&
+            colorCount > 0 && colorCount <= TrackPart.ColorCount;
     }
 
     private void GenerateTestLayout()
@@ -121,7 +122,7 @@ public sealed class TrackLayoutTool : EditorWindow
             }
 
             TrackPart trackPart = segment.AddComponent<TrackPart>();
-            trackPart.colorIndex = i % colorCount;
+            trackPart.SetColor(i % colorCount);
 
             Undo.RegisterCreatedObjectUndo(segment, "生成跑道段");
             currentStartZ += segmentLength + gapWidth;
