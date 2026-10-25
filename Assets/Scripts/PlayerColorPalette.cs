@@ -6,6 +6,9 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public class PlayerColorPalette : MonoBehaviour
 {
+    // Track colors can include Black; the player still switches only Orange/Pink.
+    public const int ColorCount = 2;
+
     public SkinnedMeshRenderer colorRenderer;
 
     [Header("Submesh index on colorRenderer")]
@@ -25,7 +28,7 @@ public class PlayerColorPalette : MonoBehaviour
 
     public bool ApplyColor(int colorIndex)
     {
-        if (colorRenderer == null || colorIndex < 0 || colorIndex > 1)
+        if (colorRenderer == null || colorIndex < 0 || colorIndex >= ColorCount)
             return false;
 
         Material hat = colorIndex == 0 ? hatOrange : hatPink;

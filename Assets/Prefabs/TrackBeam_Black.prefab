@@ -12,7 +12,8 @@ GameObject:
   - component: {fileID: 6277977136934162335}
   - component: {fileID: 8851980172846685075}
   - component: {fileID: 7508143907665879924}
-  m_Layer: 0
+  - component: {fileID: 5055113544864482223}
+  m_Layer: 8
   m_Name: TrackBeam_Black
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -104,5 +105,18 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 4.8, y: 2, z: 56}
+  m_Size: {x: 4.8, y: 2, z: 55}
   m_Center: {x: 0, y: -1, z: 28}
+--- !u!114 &5055113544864482223
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2639245936137398596}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c32b26db36749b944a819c9d8a367e75, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  definition: {fileID: 11400000, guid: d340976229bf1034dbbf24faa201dfb3, type: 2}

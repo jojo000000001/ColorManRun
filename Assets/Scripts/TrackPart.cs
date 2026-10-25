@@ -3,10 +3,15 @@ using UnityEngine;
 /// <summary>
 /// 一条跑道的逻辑颜色。显示走 MaterialPropertyBlock，不实例化材质。
 /// </summary>
+[ExecuteAlways]
 [DisallowMultipleComponent]
 public sealed class TrackPart : MonoBehaviour
 {
-    [Range(0, 1)] public int colorIndex;
+    // Authoring is handled by TrackPartBinding; this mirror is kept hidden
+    // for gameplay/color checks and backwards compatibility.
+    [HideInInspector] public TrackPartDefinition definition;
+
+    [Range(0, 2)] public int colorIndex;
 
     static readonly int ColorId = Shader.PropertyToID("_Color");
     static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
@@ -14,8 +19,10 @@ public sealed class TrackPart : MonoBehaviour
 
     static readonly Color[] Colors =
     {
-        new Color(1f, 0.62f, 0.1f, 1f),
-        new Color(1f, 0.18f, 0.72f, 1f)
+        // Warm yellow-orange used by the runway and the player's color channel 0.
+        new Color(1f, 0.675f, 0.302f, 1f),
+        new Color(1f, 0.18f, 0.72f, 1f),
+        Color.black
     };
 
     public static int ColorCount
@@ -38,17 +45,64 @@ public sealed class TrackPart : MonoBehaviour
         ApplyColor();
     }
 
+    void OnEnable()
+    {
+        // Property blocks are not serialized. Restore the preview after reload.
+#if UNITY_EDITOR
+        if (!Application.isPlaying)
+        {
+            UnityEditor.EditorApplication.update -= RefreshInEditor;
+            UnityEditor.EditorApplication.update += RefreshInEditor;
+            return;
+        }
+#endif
+        if (definition != null)
+            colorIndex = definition.ColorIndex;
+        ApplyColor();
+    }
+
     public void SetColor(int index)
     {
         colorIndex = Mathf.Clamp(index, 0, Colors.Length - 1);
         ApplyColor();
     }
 
+    public void ApplyDefinition(TrackPartDefinition source)
+    {
+        if (source == null)
+            return;
+
+        definition = source;
+        SetColor(source.ColorIndex);
+    }
+
     void OnValidate()
     {
         colorIndex = Mathf.Clamp(colorIndex, 0, Colors.Length - 1);
-        ApplyColor();
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.update -= RefreshInEditor;
+        UnityEditor.EditorApplication.update += RefreshInEditor;
+#endif
     }
+
+#if UNITY_EDITOR
+    void RefreshInEditor()
+    {
+        UnityEditor.EditorApplication.update -= RefreshInEditor;
+        if (this == null || Application.isPlaying || UnityEditor.EditorUtility.IsPersistent(this))
+            return;
+        TrackPartBinding binding = GetComponent<TrackPartBinding>();
+        if (binding != null && binding.definition != null)
+            binding.ApplyDefinition();
+        else
+            ApplyColor();
+    }
+
+    void OnDisable()
+    {
+        UnityEditor.EditorApplication.update -= RefreshInEditor;
+    }
+#endif
 
     void ApplyColor()
     {

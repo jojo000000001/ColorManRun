@@ -12,7 +12,9 @@ GameObject:
   - component: {fileID: 1319549465770586103}
   - component: {fileID: 1931642541150798633}
   - component: {fileID: 5127369477902953498}
-  m_Layer: 0
+  - component: {fileID: 1044376922588151862}
+  - component: {fileID: 8130650957981134195}
+  m_Layer: 8
   m_Name: TrackBeam_Pink
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -29,7 +31,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 0.625, y: 0.2, z: 0.25}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -106,3 +108,30 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 4.8, y: 2, z: 56}
   m_Center: {x: 0, y: -1, z: 28}
+--- !u!114 &1044376922588151862
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3572739242135609063}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c32b26db36749b944a819c9d8a367e75, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  definition: {fileID: 11400000, guid: feadeaefb0cfd054ea9111447f023d69, type: 2}
+--- !u!114 &8130650957981134195
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3572739242135609063}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b006ad6d8641f6d4cb4cd585aaa76e12, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  definition: {fileID: 11400000, guid: feadeaefb0cfd054ea9111447f023d69, type: 2}
+  colorIndex: 1

@@ -165,20 +165,20 @@ public class PlayerController : MonoBehaviour
         else if (Input.GetKeyDown(KeyCode.Alpha2))
             TrySetColor(1);
         else if (Input.GetKeyDown(KeyCode.C))
-            TrySetColor((colorIndex + 1) % TrackPart.ColorCount);
+            TrySetColor((colorIndex + 1) % PlayerColorPalette.ColorCount);
     }
 
     void HandleLeftArrow(bool pressed)
     {
         if (!pressed)
             return;
-        TrySetColor((colorIndex + 1) % TrackPart.ColorCount);
+        TrySetColor((colorIndex + 1) % PlayerColorPalette.ColorCount);
     }
 
     void TrySetColor(int index)
     {
         // 冷却期间直接丢弃，不保存请求，也不延长当前冷却。
-        if (!IsPlaying() || colorCooldown > 0f || index < 0 || index >= TrackPart.ColorCount)
+        if (!IsPlaying() || colorCooldown > 0f || index < 0 || index >= PlayerColorPalette.ColorCount)
             return;
         if (index == colorIndex)
             return;
