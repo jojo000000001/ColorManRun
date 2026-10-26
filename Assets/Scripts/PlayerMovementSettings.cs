@@ -18,6 +18,8 @@ public sealed class PlayerMovementSettings : ScriptableObject
     [Min(0f)] public float longJumpSpeedMul = 1.45f;
     [Tooltip("长跳成功后继续按住上方向键时，叠加到重力上的向上加速度，单位/秒²。")]
     [Min(0f)] public float longJumpHoldAcceleration = 30f;
+    [Tooltip("从长跳实际成功起跳开始，持续按住时最多助推的秒数（不含长按识别等待）；0 为禁用助推。")]
+    [Min(0f)] public float longJumpMaxHoldTime = 0.25f;
     [Tooltip("助推最大上升速度，单位/秒。达到后结束本次助推；0 为禁用助推。不截断起跳初速度。")]
     [Min(0f)] public float longJumpMaxUpwardSpeed = 13f;
 

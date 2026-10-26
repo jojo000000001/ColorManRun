@@ -12,14 +12,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c7f4fd250fece9d41b620042aad0da93, type: 3}
   m_Name: SharedPlayerMovement
   m_EditorClassIdentifier: 
-  baseSpeed: 15
+  baseSpeed: 20
   gravity: -20
-  deathY: -40
-  jumpVelocity: 15
+  deathY: -30
+  jumpVelocity: 20
   longJumpVelocity: 15
   longJumpSpeedMul: 1.45
   longJumpHoldAcceleration: 30
-  longJumpMaxUpwardSpeed: 15
+  longJumpMaxHoldTime: 0.25
+  longJumpMaxUpwardSpeed: 18
   coyoteTime: 0.08
   jumpBufferTime: 0.1
   longPressThreshold: 0.2

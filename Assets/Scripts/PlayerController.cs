@@ -33,6 +33,7 @@ public class PlayerController : MonoBehaviour
     public float longJumpVelocity => movementSettings != null ? movementSettings.longJumpVelocity : legacyLongJumpVelocity;
     public float longJumpSpeedMul => movementSettings != null ? movementSettings.longJumpSpeedMul : legacyLongJumpSpeedMul;
     public float longJumpHoldAcceleration => movementSettings != null ? movementSettings.longJumpHoldAcceleration : legacyLongJumpHoldAcceleration;
+    public float longJumpMaxHoldTime => movementSettings != null ? movementSettings.longJumpMaxHoldTime : 0.25f;
     public float longJumpMaxUpwardSpeed => movementSettings != null ? movementSettings.longJumpMaxUpwardSpeed : legacyLongJumpMaxUpwardSpeed;
     public float deathY => movementSettings != null ? movementSettings.deathY : legacyDeathY;
     public float coyoteTime => movementSettings != null ? movementSettings.coyoteTime : legacyCoyoteTime;
@@ -61,11 +62,26 @@ public class PlayerController : MonoBehaviour
     float jumpBufferTimer;
     float colorCooldown;
     float arrowPressTime;
+    float spacePressTime;
+    float longJumpBoostTimeRemaining;
     bool grounded;
     bool arrowTracking;
     bool arrowConsumed;
+    bool arrowJumpStarted;
     bool arrowHeld;
+    bool spaceTracking;
+    bool spaceConsumed;
+    bool spaceJumpStarted;
+    bool spaceHeld;
     bool longJumpBoostActive;
+    bool longJumpBoostFromSpace;
+    bool holdLiftActive;
+    bool holdLiftFromSpace;
+    // 按住长跳时只把上升段重力减弱到八成，高度只比普通跳略高。
+    const float HoldLiftGravityScale = 0.8f;
+    // 短跳整段都用更强的重力，缩短滞空和落点距离。长按托举的上升段不使用它。
+    const float FallGravityScale = 1.75f;
+    bool airJumpAvailable;
     bool spaceNeedsRelease;
     bool arrowNeedsRelease;
     int lastJumpFrame = -1;
@@ -118,6 +134,8 @@ public class PlayerController : MonoBehaviour
     void OnStateChanged(GameState state)
     {
         ResetPendingInput();
+        if (state == GameState.Dead || state == GameState.Clear || state == GameState.Ready)
+            airJumpAvailable = false;
     }
 
     void Update()
@@ -155,26 +173,106 @@ public class PlayerController : MonoBehaviour
         if (!held)
             arrowNeedsRelease = false;
 
-        if (spacePressed && !spaceNeedsRelease)
-            RequestJump(false);
+        ProcessSpace(spacePressed && !spaceNeedsRelease, spaceHeld && !spaceNeedsRelease, now);
         ProcessArrowUp(arrowPressed && !arrowNeedsRelease, held && !arrowNeedsRelease,
             released && !arrowNeedsRelease, now);
+    }
+
+    void ProcessSpace(bool pressed, bool held, float now)
+    {
+        spaceHeld = held;
+
+        if (pressed)
+        {
+            EndLongJumpBoost();
+            if (TryConsumeAirJump() || lastJumpFrame == Time.frameCount)
+            {
+                spaceTracking = false;
+                spaceConsumed = true;
+                spaceJumpStarted = false;
+                return;
+            }
+
+            // 按下先普通跳。超过长按阈值后，按住只轻微托住上升，松开则立刻下落。
+            spaceTracking = grounded || coyoteTimer > 0f;
+            spaceConsumed = false;
+            spaceJumpStarted = false;
+            spacePressTime = now;
+            if (spaceTracking)
+            {
+                RequestJump(false);
+                spaceJumpStarted = lastJumpFrame == Time.frameCount;
+                spaceConsumed = false;
+            }
+            else
+            {
+                RequestJump(false);
+                spaceConsumed = true;
+            }
+        }
+
+        if (!spaceTracking)
+            return;
+
+        // 按住或松开跨过阈值都升级，避免低帧率下停在普通跳。
+        if (!spaceConsumed && now - spacePressTime >= longPressThreshold)
+        {
+            spaceConsumed = true;
+            if (spaceJumpStarted)
+                PromoteTrackedJumpToLongJump(true);
+        }
+
+        if (!held)
+        {
+            if (holdLiftActive && holdLiftFromSpace && vy > 0f)
+                vy = 0f;
+            if (holdLiftFromSpace)
+                EndLongJumpBoost();
+            spaceTracking = false;
+            spaceConsumed = false;
+            spaceJumpStarted = false;
+        }
     }
 
     void ProcessArrowUp(bool pressed, bool held, bool released, float now)
     {
         arrowHeld = held && !released;
-        if (!arrowHeld)
-            longJumpBoostActive = false;
 
         if (pressed)
         {
             // A new press cannot resume the boost belonging to an older jump.
-            longJumpBoostActive = false;
-            // 空中起按整次忽略，不能在落地后补成长跳。
+            EndLongJumpBoost();
+            if (TryConsumeAirJump())
+            {
+                arrowTracking = false;
+                arrowConsumed = true;
+                return;
+            }
+            // If Space already jumped this frame, the simultaneous Up press is not another request.
+            if (lastJumpFrame == Time.frameCount)
+            {
+                arrowTracking = false;
+                arrowConsumed = true;
+                return;
+            }
+
+            // 按下先普通跳。超过长按阈值后，按住只轻微托住上升，松开则立刻下落。
             arrowTracking = grounded || coyoteTimer > 0f;
-            arrowConsumed = lastJumpFrame == Time.frameCount;
+            arrowConsumed = false;
+            arrowJumpStarted = false;
             arrowPressTime = now;
+            if (arrowTracking)
+            {
+                RequestJump(false);
+                arrowJumpStarted = lastJumpFrame == Time.frameCount;
+                arrowConsumed = false;
+            }
+            else
+            {
+                // Match Space's normal landing buffer when no air jump is available.
+                RequestJump(false);
+                arrowConsumed = true;
+            }
         }
 
         if (!arrowTracking)
@@ -184,16 +282,34 @@ public class PlayerController : MonoBehaviour
         if (!arrowConsumed && (held || released) && now - arrowPressTime >= longPressThreshold)
         {
             arrowConsumed = true;
-            RequestJump(true);
+            if (arrowJumpStarted)
+                PromoteTrackedJumpToLongJump(false);
         }
 
         if (released)
         {
-            if (!arrowConsumed)
-                RequestJump(false);
+            if (holdLiftActive && !holdLiftFromSpace && vy > 0f)
+                vy = 0f;
+            if (holdLiftActive && !holdLiftFromSpace)
+                EndLongJumpBoost();
             arrowTracking = false;
             arrowConsumed = false;
+            arrowJumpStarted = false;
         }
+    }
+
+    // 仅新的按键按下可消耗二段跳；土狼跳仍算第一段并保留二段跳次数。
+    bool TryConsumeAirJump()
+    {
+        if (!IsPlaying() || lastJumpFrame == Time.frameCount)
+            return false;
+        if (!grounded && coyoteTimer <= 0f && airJumpAvailable)
+        {
+            airJumpAvailable = false;
+            StartJump(false, true);
+            return true;
+        }
+        return false;
     }
 
     void RequestJump(bool longJump)
@@ -219,10 +335,24 @@ public class PlayerController : MonoBehaviour
         if ((!grounded && coyoteTimer <= 0f) || !IsPlaying() || lastJumpFrame == Time.frameCount)
             return false;
 
+        StartJump(longJump, false);
+        return true;
+    }
+
+    void StartJump(bool longJump, bool airJump)
+    {
         lastJumpFrame = Time.frameCount;
         vy = longJump ? longJumpVelocity : jumpVelocity;
-        speedMul = longJump ? longJumpSpeedMul : 1f;
-        longJumpBoostActive = longJump && arrowTracking && arrowConsumed && arrowHeld;
+        // 前进倍率保持 1。二段跳沿用当前倍率，不在空中再加速。
+        if (!airJump)
+            speedMul = 1f;
+        EndLongJumpBoost();
+        if (longJump && arrowTracking && arrowConsumed && arrowHeld && longJumpMaxHoldTime > 0f)
+        {
+            longJumpBoostActive = true;
+            // Only a successful takeoff starts the budget, not the initial key press.
+            longJumpBoostTimeRemaining = longJumpMaxHoldTime;
+        }
         // 成功的 Space/普通缓冲跳消耗同次 ↑，松开/阈值均不再请求第二跳。
         if (!longJump && arrowTracking)
             arrowConsumed = true;
@@ -231,7 +361,27 @@ public class PlayerController : MonoBehaviour
         coyoteTimer = 0f;
         jumpBufferTimer = 0f;
         JumpStarted?.Invoke();
-        return true;
+    }
+
+    void PromoteTrackedJumpToLongJump(bool fromSpace)
+    {
+        if (!IsPlaying() || vy <= 0f)
+            return;
+        if (fromSpace ? !spaceJumpStarted : !arrowJumpStarted)
+            return;
+
+        holdLiftActive = true;
+        holdLiftFromSpace = fromSpace;
+    }
+
+    void OnControllerColliderHit(ControllerColliderHit hit)
+    {
+        if (hit == null || !IsPlaying())
+            return;
+
+        // Ground probing only sees the feet. The controller callback also catches a
+        // colored platform touched by the player's sides or underside while airborne.
+        JudgeColor(hit.collider.GetComponentInParent<TrackPart>());
     }
 
     void JudgePhysicalSupport()
@@ -281,10 +431,11 @@ public class PlayerController : MonoBehaviour
         }
         grounded = true;
         support = part;
+        airJumpAvailable = true;
         coyoteTimer = coyoteTime;
         vy = 0f;
         speedMul = 1f;
-        longJumpBoostActive = false;
+        EndLongJumpBoost();
     }
 
     void HandleColorInput()
@@ -335,30 +486,13 @@ public class PlayerController : MonoBehaviour
                 coyoteTimer = Mathf.Max(0f, coyoteTimer - step);
             jumpBufferTimer = Mathf.Max(0f, jumpBufferTimer - step);
 
-            float maxBoostSpeed = Mathf.Max(0f, longJumpMaxUpwardSpeed);
-            bool applyBoost = longJumpBoostActive && arrowHeld && !grounded;
-            if (applyBoost && vy >= maxBoostSpeed)
-            {
-                longJumpBoostActive = false;
-                applyBoost = false;
-            }
-
-            float accelerationY = gravity;
-            if (applyBoost)
-                accelerationY += longJumpHoldAcceleration;
-            vy += accelerationY * step;
-            if (applyBoost && vy >= maxBoostSpeed)
-            {
-                // End this jump's boost, rather than hovering at the cap or restarting it next step.
-                vy = maxBoostSpeed;
-                longJumpBoostActive = false;
-            }
+            IntegrateVerticalVelocity(step);
             float verticalMove = grounded ? -Mathf.Max(2f, baseSpeed * speedMul) * step : vy * step;
             CollisionFlags flags = controller.Move(new Vector3(0f, verticalMove, baseSpeed * speedMul * step));
             if ((flags & CollisionFlags.Above) != 0 && vy > 0f)
             {
                 vy = 0f;
-                longJumpBoostActive = false;
+                EndLongJumpBoost();
             }
             RefreshSupport();
             JudgePhysicalSupport();
@@ -368,6 +502,65 @@ public class PlayerController : MonoBehaviour
             if (transform.position.y < deathY)
                 GameManager.Instance.GameOver("掉下去了");
         }
+    }
+
+    void EndLongJumpBoost()
+    {
+        longJumpBoostActive = false;
+        longJumpBoostFromSpace = false;
+        longJumpBoostTimeRemaining = 0f;
+        holdLiftActive = false;
+    }
+
+    void IntegrateVerticalVelocity(float step)
+    {
+        bool liftHeld = holdLiftFromSpace ? spaceHeld : arrowHeld;
+        if (holdLiftActive && liftHeld && vy > 0f)
+        {
+            float reduced = gravity * HoldLiftGravityScale;
+            if (reduced < 0f)
+            {
+                float timeToApex = vy / -reduced;
+                if (timeToApex < step)
+                {
+                    vy = gravity * FallGravityScale * (step - timeToApex);
+                    return;
+                }
+            }
+            vy += reduced * step;
+            return;
+        }
+
+        float maxBoostSpeed = Mathf.Max(0f, longJumpMaxUpwardSpeed);
+        bool boostHeld = longJumpBoostFromSpace ? spaceHeld : arrowHeld;
+        if (longJumpBoostActive && (!boostHeld || grounded || vy <= 0f ||
+            longJumpBoostTimeRemaining <= 0f || vy >= maxBoostSpeed))
+            EndLongJumpBoost();
+
+        if (!longJumpBoostActive)
+        {
+            vy += gravity * FallGravityScale * step;
+            return;
+        }
+
+        float accelerationY = gravity + longJumpHoldAcceleration;
+        float boostStep = Mathf.Min(step, longJumpBoostTimeRemaining);
+        bool reachedVelocityBoundary = false;
+        // Stop at an apex/speed cap even when it falls inside this simulation substep.
+        float timeToBoundary = accelerationY < 0f ? vy / -accelerationY :
+            accelerationY > 0f ? (maxBoostSpeed - vy) / accelerationY : float.PositiveInfinity;
+        if (timeToBoundary <= boostStep)
+        {
+            boostStep = timeToBoundary;
+            reachedVelocityBoundary = true;
+        }
+
+        vy += accelerationY * boostStep;
+        longJumpBoostTimeRemaining = Mathf.Max(0f, longJumpBoostTimeRemaining - boostStep);
+        if (reachedVelocityBoundary || longJumpBoostTimeRemaining <= 0.000001f)
+            EndLongJumpBoost();
+        // A partial final boost step uses full gravity for its remainder. Keep momentum.
+        vy += gravity * (step - boostStep);
     }
 
     void JudgeColor(TrackPart part)
@@ -398,8 +591,13 @@ public class PlayerController : MonoBehaviour
     {
         arrowTracking = false;
         arrowConsumed = false;
+        arrowJumpStarted = false;
         arrowHeld = false;
-        longJumpBoostActive = false;
+        spaceTracking = false;
+        spaceConsumed = false;
+        spaceJumpStarted = false;
+        spaceHeld = false;
+        EndLongJumpBoost();
         jumpBufferTimer = 0f;
         // 新场景/恢复/重启前已经按住的键，必须先松开后重新按下。
         spaceNeedsRelease = true;
