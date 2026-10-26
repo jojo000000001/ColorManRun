@@ -111,7 +111,7 @@ Empty 没有 Motion 且 Write Defaults 关闭时，不能只依赖回到 Empty �
 
 ## 5. 脚本接线与职责
 
-完整实现：`Assets/Scripts/PlayerAnimator.cs`。挂在带 `PlayerController` 的 Player 上，Animator 字段指向 Player 的现有 Animator。
+完整实现：`Assets/Scripts/Player/PlayerAnimator.cs`。挂在带 `PlayerController` 的 Player 上，Animator 字段指向 Player 的现有 Animator。
 
 | 接口 | 调用来源 / 行为 |
 | --- | --- |
