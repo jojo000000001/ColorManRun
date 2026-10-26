@@ -22,6 +22,7 @@ public class GameManager : MonoBehaviour
 
     public GameState State { get; private set; } = GameState.Ready;
     public float LevelTime { get; private set; }
+    public event System.Action<GameState> StateChanged;
 
     [Tooltip("通关后加载的场景名称；场景必须已加入 Build Settings。")]
     public string nextSceneName;
@@ -30,6 +31,27 @@ public class GameManager : MonoBehaviour
     public float restartDelay = 0.5f;
 
     Coroutine restartRoutine;
+    FinishTrigger pendingFinish;
+    PlayerController pendingPlayer;
+
+    void SetState(GameState state)
+    {
+        State = state;
+        pendingFinish = null;
+        pendingPlayer = null;
+        StateChanged?.Invoke(state);
+    }
+
+    void LateUpdate()
+    {
+        // 所有 Update 的移动/掉落/颜色死亡先结算；终点仅提交候选。
+        FinishTrigger finish = pendingFinish;
+        PlayerController player = pendingPlayer;
+        pendingFinish = null;
+        pendingPlayer = null;
+        if (State == GameState.Playing && finish != null && finish.CanFinish(player))
+            CompleteLevelClear();
+    }
 
     void Awake()
     {
@@ -67,7 +89,7 @@ public class GameManager : MonoBehaviour
             StopCoroutine(restartRoutine);
             restartRoutine = null;
         }
-        State = GameState.Playing;
+        SetState(GameState.Playing);
         LevelTime = 0f;
     }
 
@@ -76,7 +98,7 @@ public class GameManager : MonoBehaviour
         if (State != GameState.Playing)
             return;
 
-        State = GameState.Dead;
+        SetState(GameState.Dead);
         Debug.Log("GameOver: " + reason);
         restartRoutine = StartCoroutine(RestartCurrentLevel());
     }
@@ -109,7 +131,15 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    public void LevelClear()
+    public void RequestLevelClear(FinishTrigger finish, PlayerController player)
+    {
+        if (State != GameState.Playing || finish == null || !finish.CanFinish(player))
+            return;
+        pendingFinish = finish;
+        pendingPlayer = player;
+    }
+
+    void CompleteLevelClear()
     {
         if (State != GameState.Playing)
             return;
@@ -121,7 +151,7 @@ public class GameManager : MonoBehaviour
         }
 
         // 先锁定状态，多个玩家碰撞体或连续触发不能重复请求加载。
-        State = GameState.Clear;
+        SetState(GameState.Clear);
         Debug.Log("LevelClear: " + gameObject.scene.name + " -> " + nextSceneName);
         try
         {
@@ -129,7 +159,7 @@ public class GameManager : MonoBehaviour
         }
         catch (System.Exception exception)
         {
-            State = GameState.Playing;
+            SetState(GameState.Playing);
             Debug.LogException(exception, this);
         }
     }
@@ -137,8 +167,8 @@ public class GameManager : MonoBehaviour
     public void TogglePause()
     {
         if (State == GameState.Playing)
-            State = GameState.Paused;
+            SetState(GameState.Paused);
         else if (State == GameState.Paused)
-            State = GameState.Playing;
+            SetState(GameState.Playing);
     }
 }

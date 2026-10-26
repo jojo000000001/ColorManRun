@@ -15,11 +15,11 @@ MonoBehaviour:
   baseSpeed: 15
   gravity: -20
   deathY: -40
-  jumpVelocity: 10
-  longJumpVelocity: 11.5
+  jumpVelocity: 15
+  longJumpVelocity: 15
   longJumpSpeedMul: 1.45
   longJumpHoldAcceleration: 30
-  longJumpMaxUpwardSpeed: 13
+  longJumpMaxUpwardSpeed: 15
   coyoteTime: 0.08
   jumpBufferTime: 0.1
   longPressThreshold: 0.2

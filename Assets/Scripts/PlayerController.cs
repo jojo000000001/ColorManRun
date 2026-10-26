@@ -2,11 +2,11 @@ using UnityEngine;
 using UnityEngine.Serialization;
 
 /// <summary>
-/// 手动积分移动；刚体和 Trigger 胶囊只负责终点触发，不驱动位移。
-/// centerOffset 允许脚底 Pivot 的 FBX 使用与胶囊相同的中心落地检测。
+/// 逻辑积分速度，CharacterController 负责全部移动与碰撞。
+/// centerOffset 保留脚底 Pivot 模型的胶囊中心偏移。
 /// </summary>
 [DisallowMultipleComponent]
-[RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider))]
+[RequireComponent(typeof(CharacterController))]
 public class PlayerController : MonoBehaviour
 {
     [Tooltip("两关引用同一份 SO；运动与输入时序直接读取该资源，不复制成场景参数。")]
@@ -48,6 +48,8 @@ public class PlayerController : MonoBehaviour
 
     public int ColorIndex { get { return colorIndex; } }
     public bool IsGrounded { get { return grounded; } }
+    public TrackPart Support { get { return grounded ? support : null; } }
+    public Vector3 FeetPosition => transform.TransformPoint(centerOffset) - Vector3.up * halfHeight;
 
     // Visual observers receive only successfully executed actions, not raw input.
     public event System.Action JumpStarted;
@@ -60,15 +62,20 @@ public class PlayerController : MonoBehaviour
     float colorCooldown;
     float arrowPressTime;
     bool grounded;
-    bool bufferedLongJump;
     bool arrowTracking;
     bool arrowConsumed;
     bool arrowHeld;
     bool longJumpBoostActive;
+    bool spaceNeedsRelease;
+    bool arrowNeedsRelease;
+    int lastJumpFrame = -1;
     int colorIndex;
     TrackPart support;
     Renderer fallbackRenderer;
     MaterialPropertyBlock colorBlock;
+    CharacterController controller;
+    GameManager subscribedManager;
+    readonly RaycastHit[] groundHits = new RaycastHit[32];
 
     static readonly int ColorId = Shader.PropertyToID("_Color");
     static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
@@ -78,16 +85,17 @@ public class PlayerController : MonoBehaviour
         if (movementSettings == null)
             Debug.LogWarning("PlayerController 未指定共享运动 SO，暂用旧场景参数。请绑定 Assets/SO/SharedPlayerMovement.asset。", this);
 
-        Rigidbody body = GetComponent<Rigidbody>();
-        body.isKinematic = true;
-        body.useGravity = false;
-
-        CapsuleCollider capsule = GetComponent<CapsuleCollider>();
-        capsule.isTrigger = true;
-        capsule.direction = 1;
-        capsule.center = centerOffset;
-        capsule.height = halfHeight * 2f / Mathf.Max(0.001f, Mathf.Abs(transform.lossyScale.y));
-        capsule.radius = Mathf.Min(0.4f, capsule.height * 0.45f);
+        controller = GetComponent<CharacterController>();
+        controller.center = centerOffset;
+        controller.height = halfHeight * 2f / Mathf.Max(0.001f, Mathf.Abs(transform.lossyScale.y));
+        controller.radius = Mathf.Min(0.4f, controller.height * 0.45f);
+        controller.skinWidth = 0.02f;
+        controller.minMoveDistance = 0f;
+        controller.stepOffset = 0.3f;
+        controller.slopeLimit = 50f;
+        Animator animator = GetComponent<Animator>();
+        if (animator != null)
+            animator.applyRootMotion = false;
 
         if (groundMask.value == 0)
             groundMask = LayerMask.GetMask("Ground");
@@ -97,6 +105,19 @@ public class PlayerController : MonoBehaviour
         fallbackRenderer = GetComponent<Renderer>();
         colorBlock = new MaterialPropertyBlock();
         ApplyColorVisual();
+    }
+
+    void OnEnable()
+    {
+        subscribedManager = GameManager.Instance;
+        if (subscribedManager != null)
+            subscribedManager.StateChanged += OnStateChanged;
+        ResetPendingInput();
+    }
+
+    void OnStateChanged(GameState state)
+    {
+        ResetPendingInput();
     }
 
     void Update()
@@ -112,30 +133,32 @@ public class PlayerController : MonoBehaviour
             return;
         colorCooldown = Mathf.Max(0f, colorCooldown - dt);
 
-        Vector3 position = transform.position;
-        ProbeGround(ref position);
-        transform.position = position;
+        RefreshSupport();
         if (!IsPlaying())
             return;
 
-        HandleSpace();
-        HandleArrowUp();
+        ProcessJumpInput(Input.GetKeyDown(KeyCode.Space), Input.GetKey(KeyCode.Space),
+            Input.GetKeyDown(KeyCode.UpArrow), Input.GetKey(KeyCode.UpArrow),
+            Input.GetKeyUp(KeyCode.UpArrow), Time.time);
         HandleColorInput();
+        // 起跳只改变速度，不能借 grounded=false 跳过尚未离开的错误颜色支撑。
+        JudgePhysicalSupport();
         if (IsPlaying())
             SimulateMovement(dt);
     }
 
-    void HandleSpace()
+    void ProcessJumpInput(bool spacePressed, bool spaceHeld, bool arrowPressed,
+        bool held, bool released, float now)
     {
-        if (Input.GetKeyDown(KeyCode.Space))
-            RequestJump(false);
-    }
+        if (!spaceHeld)
+            spaceNeedsRelease = false;
+        if (!held)
+            arrowNeedsRelease = false;
 
-    // 与空格分开：短按只在松开时跳，长按达到阈值就消耗本次按键。
-    void HandleArrowUp()
-    {
-        ProcessArrowUp(Input.GetKeyDown(KeyCode.UpArrow), Input.GetKey(KeyCode.UpArrow),
-            Input.GetKeyUp(KeyCode.UpArrow), Time.time);
+        if (spacePressed && !spaceNeedsRelease)
+            RequestJump(false);
+        ProcessArrowUp(arrowPressed && !arrowNeedsRelease, held && !arrowNeedsRelease,
+            released && !arrowNeedsRelease, now);
     }
 
     void ProcessArrowUp(bool pressed, bool held, bool released, float now)
@@ -148,8 +171,9 @@ public class PlayerController : MonoBehaviour
         {
             // A new press cannot resume the boost belonging to an older jump.
             longJumpBoostActive = false;
-            arrowTracking = true;
-            arrowConsumed = false;
+            // 空中起按整次忽略，不能在落地后补成长跳。
+            arrowTracking = grounded || coyoteTimer > 0f;
+            arrowConsumed = lastJumpFrame == Time.frameCount;
             arrowPressTime = now;
         }
 
@@ -174,26 +198,93 @@ public class PlayerController : MonoBehaviour
 
     void RequestJump(bool longJump)
     {
-        bufferedLongJump = longJump;
+        if (longJump)
+        {
+            // 长跳只在阈值帧尝试一次，绝不进入落地缓冲。
+            TryJump(true);
+            return;
+        }
         jumpBufferTimer = jumpBufferTime;
         TryBufferedJump();
     }
 
     void TryBufferedJump()
     {
-        if (jumpBufferTimer <= 0f || (!grounded && coyoteTimer <= 0f) || !IsPlaying())
-            return;
+        if (jumpBufferTimer > 0f)
+            TryJump(false);
+    }
 
-        vy = bufferedLongJump ? longJumpVelocity : jumpVelocity;
-        speedMul = bufferedLongJump ? longJumpSpeedMul : 1f;
-        // Grant hold acceleration only when this long jump actually starts.
-        // Buffered jumps released before landing still get their impulse, not a boost.
-        longJumpBoostActive = bufferedLongJump && arrowTracking && arrowConsumed && arrowHeld;
+    bool TryJump(bool longJump)
+    {
+        if ((!grounded && coyoteTimer <= 0f) || !IsPlaying() || lastJumpFrame == Time.frameCount)
+            return false;
+
+        lastJumpFrame = Time.frameCount;
+        vy = longJump ? longJumpVelocity : jumpVelocity;
+        speedMul = longJump ? longJumpSpeedMul : 1f;
+        longJumpBoostActive = longJump && arrowTracking && arrowConsumed && arrowHeld;
+        // 成功的 Space/普通缓冲跳消耗同次 ↑，松开/阈值均不再请求第二跳。
+        if (!longJump && arrowTracking)
+            arrowConsumed = true;
         grounded = false;
         support = null;
         coyoteTimer = 0f;
         jumpBufferTimer = 0f;
         JumpStarted?.Invoke();
+        return true;
+    }
+
+    void JudgePhysicalSupport()
+    {
+        TrackPart part;
+        if (FindSupport(out part))
+            JudgeColor(part);
+    }
+
+    bool FindSupport(out TrackPart part)
+    {
+        part = null;
+        float radius = controller.radius * Mathf.Max(Mathf.Abs(transform.lossyScale.x), Mathf.Abs(transform.lossyScale.z));
+        Vector3 bottomCenter = FeetPosition + Vector3.up * radius;
+        // 从足够高处扫掠，避免斜坡上的起始球重叠；零距离命中没有可靠表面法线。
+        float lift = Mathf.Max(0.3f, radius);
+        int count = Physics.SphereCastNonAlloc(bottomCenter + Vector3.up * lift,
+            Mathf.Max(0.01f, radius - 0.005f), Vector3.down, groundHits, lift + 0.05f,
+            groundMask, QueryTriggerInteraction.Ignore);
+        float closest = float.PositiveInfinity;
+        int closestId = int.MaxValue;
+        float minNormal = Mathf.Cos(controller.slopeLimit * Mathf.Deg2Rad);
+        for (int i = 0; i < count; i++)
+        {
+            RaycastHit hit = groundHits[i];
+            if (hit.collider == controller || hit.distance <= 0.0001f || hit.normal.y < minNormal)
+                continue;
+            int id = hit.collider.GetInstanceID();
+            if (hit.distance > closest + 0.0001f ||
+                (Mathf.Abs(hit.distance - closest) <= 0.0001f && id >= closestId))
+                continue;
+            closest = hit.distance;
+            closestId = id;
+            part = hit.collider.GetComponentInParent<TrackPart>();
+        }
+        return closest < float.PositiveInfinity;
+    }
+
+    void RefreshSupport()
+    {
+        TrackPart part;
+        if (vy > 0f || !FindSupport(out part))
+        {
+            grounded = false;
+            support = null;
+            return;
+        }
+        grounded = true;
+        support = part;
+        coyoteTimer = coyoteTime;
+        vy = 0f;
+        speedMul = 1f;
+        longJumpBoostActive = false;
     }
 
     void HandleColorInput()
@@ -230,23 +321,20 @@ public class PlayerController : MonoBehaviour
 
         ColorChanged?.Invoke();
 
-        if (grounded)
-            JudgeColor(support);
+        JudgePhysicalSupport();
     }
 
     void SimulateMovement(float dt)
     {
-        // 小步积分避免低帧率时中心穿到薄跑道下面，漏掉向下射线。
+        // 小步保持原有助推积分；每步由控制器扫掠，墙面/顶面均真实阻挡。
         int steps = Mathf.Clamp(Mathf.CeilToInt(dt / (1f / 120f)), 1, 128);
         float step = dt / steps;
-        Vector3 position = transform.position;
         for (int i = 0; i < steps && IsPlaying(); i++)
         {
             if (!grounded)
                 coyoteTimer = Mathf.Max(0f, coyoteTimer - step);
             jumpBufferTimer = Mathf.Max(0f, jumpBufferTimer - step);
 
-            position.z += baseSpeed * speedMul * step;
             float maxBoostSpeed = Mathf.Max(0f, longJumpMaxUpwardSpeed);
             bool applyBoost = longJumpBoostActive && arrowHeld && !grounded;
             if (applyBoost && vy >= maxBoostSpeed)
@@ -265,44 +353,21 @@ public class PlayerController : MonoBehaviour
                 vy = maxBoostSpeed;
                 longJumpBoostActive = false;
             }
-            position.y += vy * step;
-            ProbeGround(ref position);
+            float verticalMove = grounded ? -Mathf.Max(2f, baseSpeed * speedMul) * step : vy * step;
+            CollisionFlags flags = controller.Move(new Vector3(0f, verticalMove, baseSpeed * speedMul * step));
+            if ((flags & CollisionFlags.Above) != 0 && vy > 0f)
+            {
+                vy = 0f;
+                longJumpBoostActive = false;
+            }
+            RefreshSupport();
+            JudgePhysicalSupport();
 
             // 先判断落地颜色，再消费缓冲，不能靠缓冲跳过错误颜色长条。
             TryBufferedJump();
-            if (position.y < deathY)
+            if (transform.position.y < deathY)
                 GameManager.Instance.GameOver("掉下去了");
         }
-        transform.position = position;
-    }
-
-    void ProbeGround(ref Vector3 position)
-    {
-        RaycastHit hit = default(RaycastHit);
-        Vector3 centerOffsetWorld = transform.TransformVector(centerOffset);
-        Vector3 center = position + centerOffsetWorld;
-        bool hitGround = vy <= 0f && Physics.Raycast(center, Vector3.down, out hit,
-            halfHeight + 0.05f, groundMask, QueryTriggerInteraction.Ignore);
-
-        if (!hitGround)
-        {
-            grounded = false;
-            support = null;
-            return;
-        }
-
-        TrackPart part = hit.collider.GetComponentInParent<TrackPart>();
-        bool landedOrChangedPart = !grounded || part != support;
-        position.y = hit.point.y + halfHeight - centerOffsetWorld.y;
-        vy = 0f;
-        speedMul = 1f;
-        longJumpBoostActive = false;
-        grounded = true;
-        coyoteTimer = coyoteTime;
-        support = part;
-
-        if (landedOrChangedPart)
-            JudgeColor(part);
     }
 
     void JudgeColor(TrackPart part)
@@ -336,10 +401,15 @@ public class PlayerController : MonoBehaviour
         arrowHeld = false;
         longJumpBoostActive = false;
         jumpBufferTimer = 0f;
+        // 新场景/恢复/重启前已经按住的键，必须先松开后重新按下。
+        spaceNeedsRelease = true;
+        arrowNeedsRelease = true;
     }
 
     void OnDisable()
     {
+        if (subscribedManager != null)
+            subscribedManager.StateChanged -= OnStateChanged;
         ResetPendingInput();
     }
 
