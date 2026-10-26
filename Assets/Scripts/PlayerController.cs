@@ -224,8 +224,8 @@ public class PlayerController : MonoBehaviour
 
         if (!held)
         {
-            if (holdLiftActive && holdLiftFromSpace && vy > 0f)
-                vy = 0f;
+            if (holdLiftActive && holdLiftFromSpace)
+                ApplyShortJumpReleaseSpeed(now - spacePressTime);
             if (holdLiftFromSpace)
                 EndLongJumpBoost();
             spaceTracking = false;
@@ -288,8 +288,8 @@ public class PlayerController : MonoBehaviour
 
         if (released)
         {
-            if (holdLiftActive && !holdLiftFromSpace && vy > 0f)
-                vy = 0f;
+            if (holdLiftActive && !holdLiftFromSpace)
+                ApplyShortJumpReleaseSpeed(now - arrowPressTime);
             if (holdLiftActive && !holdLiftFromSpace)
                 EndLongJumpBoost();
             arrowTracking = false;
@@ -372,6 +372,16 @@ public class PlayerController : MonoBehaviour
 
         holdLiftActive = true;
         holdLiftFromSpace = fromSpace;
+    }
+
+    // 松开后不低于同一时刻的短跳速度；超过短跳最高点后，只收掉剩余的向上速度。
+    void ApplyShortJumpReleaseSpeed(float elapsed)
+    {
+        float shortVy = jumpVelocity + gravity * FallGravityScale * Mathf.Max(0f, elapsed);
+        if (shortVy > 0f)
+            vy = Mathf.Max(vy, shortVy);
+        else if (vy > 0f)
+            vy = 0f;
     }
 
     void OnControllerColliderHit(ControllerColliderHit hit)
