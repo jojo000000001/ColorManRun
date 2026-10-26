@@ -38,8 +38,11 @@ public class FinishTrigger : MonoBehaviour
     {
         if (!isActiveAndEnabled || finalPlatform == null || !finalPlatform.enabled ||
             !finalPlatform.gameObject.activeInHierarchy || candidate == null ||
-            !candidate.isActiveAndEnabled || !candidate.CompareTag("Player") || !candidate.IsGrounded)
+            !candidate.isActiveAndEnabled || !candidate.CompareTag("Player"))
             return false;
+
+        if (!candidate.IsGrounded)
+            return CanFinishFromAbove(candidate);
 
         TrackPart part = finalPlatform.GetComponentInParent<TrackPart>();
         if (part == null || candidate.Support != part || part.colorIndex != candidate.ColorIndex)
@@ -64,5 +67,39 @@ public class FinishTrigger : MonoBehaviour
         Vector3 local = zone.transform.InverseTransformPoint(feet + Vector3.up * 0.2f) - zone.center;
         Vector3 extent = zone.size * 0.5f;
         return Mathf.Abs(local.x) <= extent.x && Mathf.Abs(local.y) <= extent.y && Mathf.Abs(local.z) <= extent.z;
+    }
+
+    // 空中跳过终点：水平位置仍须在终点区域内，向下射线打到最后一块平台即可，不要求颜色一致。
+    bool CanFinishFromAbove(PlayerController candidate)
+    {
+        if (zone == null)
+            zone = GetComponent<BoxCollider>();
+        if (!zone.enabled)
+            return false;
+
+        Vector3 feet = candidate.FeetPosition;
+        Vector3 local = zone.transform.InverseTransformPoint(feet + Vector3.up * 0.2f) - zone.center;
+        Vector3 extent = zone.size * 0.5f;
+        if (Mathf.Abs(local.x) > extent.x || Mathf.Abs(local.z) > extent.z)
+            return false;
+
+        CharacterController body = candidate.GetComponent<CharacterController>();
+        float radius = body.radius * Mathf.Max(Mathf.Abs(candidate.transform.lossyScale.x), Mathf.Abs(candidate.transform.lossyScale.z));
+        Vector3 scale = finalPlatform.transform.lossyScale;
+        Vector3 localFeet = finalPlatform.transform.InverseTransformPoint(feet) - finalPlatform.center;
+        Vector3 half = finalPlatform.size * 0.5f;
+        if (Mathf.Abs(localFeet.x) + radius / Mathf.Abs(scale.x) > half.x ||
+            Mathf.Abs(localFeet.z) + radius / Mathf.Abs(scale.z) > half.z)
+            return false;
+
+        float belowTop = (half.y - localFeet.y) * Mathf.Abs(scale.y);
+        if (belowTop > 0.05f)
+            return false;
+
+        Vector3 origin = feet + Vector3.up * 0.2f;
+        RaycastHit hit;
+        if (!Physics.Raycast(origin, Vector3.down, out hit, 200f, candidate.groundMask, QueryTriggerInteraction.Ignore))
+            return false;
+        return hit.collider == finalPlatform;
     }
 }

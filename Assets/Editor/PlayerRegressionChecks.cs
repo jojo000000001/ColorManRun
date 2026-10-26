@@ -246,7 +246,9 @@ public static class PlayerRegressionChecks
             check("终点下方拒绝通关", !finish.CanFinish(player));
             reset(true);
             Call(player, "ProcessJumpInput", true, true, false, false, false, 0f);
-            check("空中穿过终点拒绝通关", !finish.CanFinish(player));
+            check("空中位于终点平台上方可通关", finish.CanFinish(player));
+            Set(player, "colorIndex", 1);
+            check("空中颜色不一致仍可通关", !player.IsGrounded && finish.CanFinish(player));
             reset(true);
             Set(player, "colorIndex", 1);
             check("错误颜色拒绝通关", !finish.CanFinish(player));
