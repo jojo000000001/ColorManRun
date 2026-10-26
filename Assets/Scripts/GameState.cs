@@ -20,6 +20,13 @@ public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
+    // Fast Enter Play Mode skips static initialization. Clear the previous session explicitly.
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics()
+    {
+        Instance = null;
+    }
+
     public GameState State { get; private set; } = GameState.Ready;
     public float LevelTime { get; private set; }
     public event System.Action<GameState> StateChanged;
