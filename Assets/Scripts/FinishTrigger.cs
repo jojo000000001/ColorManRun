@@ -29,9 +29,35 @@ public class FinishTrigger : MonoBehaviour
 
     void Update()
     {
+        AlignZoneToFinalPlatform();
         // 不依赖 Rigidbody/触发回调时序，落在终点区域内也能正确判定。
         if (CanFinish(player) && GameManager.Instance != null)
             GameManager.Instance.RequestLevelClear(this, player);
+    }
+
+    void OnValidate()
+    {
+        AlignZoneToFinalPlatform();
+    }
+
+    // 终点区贴在最后一块平台碰撞体的末端上表面，缩短或挪动跑道后仍覆盖末段约 3 米。
+    void AlignZoneToFinalPlatform()
+    {
+        if (finalPlatform == null)
+            return;
+        if (zone == null)
+            zone = GetComponent<BoxCollider>();
+        if (zone == null)
+            return;
+
+        Transform platform = finalPlatform.transform;
+        Vector3 farTop = platform.TransformPoint(finalPlatform.center + new Vector3(
+            0f, finalPlatform.size.y * 0.5f, finalPlatform.size.z * 0.5f));
+        Vector3 forward = platform.TransformDirection(Vector3.forward);
+        Vector3 up = platform.TransformDirection(Vector3.up);
+        Vector3 half = zone.size * 0.5f;
+        transform.SetPositionAndRotation(farTop - forward * half.z + up * half.y, platform.rotation);
+        zone.center = Vector3.zero;
     }
 
     public bool CanFinish(PlayerController candidate)
