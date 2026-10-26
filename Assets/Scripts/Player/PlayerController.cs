@@ -49,6 +49,7 @@ public class PlayerController : MonoBehaviour
 
     public int ColorIndex { get { return colorIndex; } }
     public bool IsGrounded { get { return grounded; } }
+    public bool IsLongJumpHeld { get { return holdLiftActive && (holdLiftFromSpace ? spaceHeld : arrowHeld); } }
     public TrackPart Support { get { return grounded ? support : null; } }
     public Vector3 FeetPosition => transform.TransformPoint(centerOffset) - Vector3.up * halfHeight;
 
